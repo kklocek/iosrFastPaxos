@@ -1,18 +1,31 @@
 import pika
 import pykka
+import json
 
 
 ## Actor definition
 
 class Node(pykka.ThreadingActor):
-    def __init__(self, greeting='Hi there!'):
+    def __init__(self, database = {}):
         super(Node, self).__init__()
-        self.greeting = greeting
+        self.database = database
 
     def on_receive(self, message):
         print 'I received: ', message
+        msg_body = json.loads(message['msg'])
+        if msg_body['command'] == 'set':
+            self._set_value(msg_body)
+        elif msg_body['command'] == 'print':
+            self._print_database()
 
-actor_ref = Node.start(greeting='Hi you!')
+    def _print_database(self):
+        print self.database
+
+    def _set_value(self, msg_body):
+        self.database[msg_body['key']] = msg_body['value']
+
+
+actor_ref = Node.start()
 
 
 ## Setting up communication
