@@ -1,4 +1,6 @@
 import pykka
+import json
+import datetime
 from sqs_listener import SqsListener
 
 
@@ -7,6 +9,7 @@ from sqs_listener import SqsListener
 class Node(pykka.ThreadingActor):
 
     node_id = None
+    is_coordinator = None
     coordinator_address = None
 
     # accepted proposed_id - after accepted! msg
@@ -55,9 +58,19 @@ class Node(pykka.ThreadingActor):
         self.accepted_id = msg_body['id']
         self.accepted_value = msg_body['value']
 
-    # TODO decide id format
+    def _create_id(self):
+        new_id = {}
+        time_stamp = str(datetime.datetime.now())
+        new_id['time'] = time_stamp
+        new_id['id'] = self.node_id
+        return json.dump(new_id)
+
     def _check_id(self, id):
-        return True
+        if self.proposed_id['time'] < id['time']:
+            return True
+        elif self.proposed_id['time'] > id['time']:
+            return False
+        #TODO what if same time
 
     def _print_database(self):
         print(self.database)
