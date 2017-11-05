@@ -1,19 +1,34 @@
+import json
+import datetime
 import boto3
 
 
 nodes_queues = ['iosrFastPaxos_node1']
 response_queue_name = 'iosrFastPaxos_client1'
+read_queue_name = 'iosrFastPaxos_readQueue'
 sqs = boto3.resource('sqs')
+client_id = 1
 
 
 def get_value(key):
-    pass
+    msg_body = json.dumps({'command': 'read', 'key': key,
+                'response_queue': response_queue_name})
+    queue = sqs.get_queue_by_name(QueueName=read_queue_name)
+    queue.send_message(MessageBody=msg_body)
+
+    read_queue = sqs.get_queue_by_name(QueueName=response_queue_name)
+    for message in read_queue.receive_messages(WaitTimeSeconds=5):
+        if message.body['command'] == 'read_response':
+            return message.body['key']
+
 
 def set_value(key, value):
+    msg_body = json.dumps({'command': 'accept', 'key': key, 'value': value, 
+                'response_queue': response_queue_name, 'id': client_id,
+                'time': str(datetime.datetime.now())})
     for queue_name in nodes_queues:
         queue = sqs.get_queue_by_name(QueueName=queue_name)
-        queue.send_message(MessageBody={'command': 'accept', 'key': key, 'value': value, 
-                                'response_queue': response_queue_name})
+        queue.send_message(MessageBody=msg_body)
                             
     response_queue = sqs.get_queue_by_name(QueueName=response_queue_name)
     for message in queue.receive_messages(WaitTimeSeconds=5):
