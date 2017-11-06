@@ -2,6 +2,7 @@ import pykka
 import json
 import datetime
 from sqs_listener import SqsListener
+from sqs_launcher import SqsLauncher
 
 
 ## Actor definition
@@ -16,10 +17,8 @@ class Node(pykka.ThreadingActor):
     accepted_id = None
     # after accept msg
     proposed_id = None
-    # commited value
-    accepted_value = None
-    # value to be commited
-    proposed_value = None
+
+    accepted = {}
 
     def __init__(self, id, database={}):
         super(Node, self).__init__()
@@ -39,36 +38,42 @@ class Node(pykka.ThreadingActor):
             self._handle_accepted(msg_body)
 
     def _handle_any(self, msg_body):
-        if self._check_id(msg_body['id']):
+        if self._check_id(msg_body['key'], msg_body['id']):
             self.proposed_id = msg_body['id']
             self._send_any_accepted()
         else:
             self._send_any_not_accepted()
 
     def _handle_proposal(self, msg_body):
-        if self._check_id(msg_body['id']):
-            self.proposed_id = msg_body['id']
-            self.proposed_value = msg_body['value']
-            self._send_proposal_accepted()
+        key = msg_body['key']
+        if (not key in self.accepted) or self._check_id(key, msg_body['id']):
+            proposal = {'proposed_id': msg_body['id'], 'proposed_value': msg_body['value']}
+            self.accepted[key] = proposal
+            self._send_proposal_accepted(key)
         else:
-            self._send_proposal_not_accepted()
+            self._send_proposal_not_accepted(key, msg_body['id'])
             print(self.node_id, ' received outdated proposal: ', (msg_body['id']))
 
     def _handle_accepted(self, msg_body):
-        self.accepted_id = msg_body['id']
-        self.accepted_value = msg_body['value']
+        key = msg_body['key']
+        if key in self.accepted and msg_body['id'] == self.accepted[key]['id'] and msg_body['value'] == self.accepted[key]['value']:
+            self.database[key] = msg_body['value']
+            del self.accepted[key]
+        else:
+            # What if we crash on accepted?
+            pass
 
     def _create_id(self):
         new_id = {}
         time_stamp = str(datetime.datetime.now())
         new_id['time'] = time_stamp
         new_id['id'] = self.node_id
-        return json.dump(new_id)
+        return json.dumps(new_id)
 
-    def _check_id(self, id):
-        if self.proposed_id['time'] < id['time']:
+    def _check_id(self, key, id):
+        if self.accepted[key]['proposed_id']['time'] < id['time']:
             return True
-        elif self.proposed_id['time'] > id['time']:
+        elif self.accepted[key]['proposed_id']['time'] > id['time']:
             return False
         #TODO what if same time
 
@@ -82,14 +87,16 @@ class Node(pykka.ThreadingActor):
     def _send_any_not_accepted(self):
         pass
 
-    def _send_proposal_accepted(self):
-        pass
+    def _send_proposal_accepted(self, key):
+        launcher = SqsLauncher(self.coordinator_address)
+        launcher.launch_message({'command': 'accepted', 'key': key, 'id': self.accepted[key]['id']})
 
-    def _send_proposal_not_accepted(self):
-        pass
+    def _send_proposal_not_accepted(self, key, id):
+        launcher = SqsLauncher(self.coordinator_address)
+        launcher.launch_message({'command': 'not_accepted', 'key': key, 'id': id})
 
 
-actor_ref = Node.start()
+actor_ref = Node.start('node1')
 
 
 ## Setting up communication
