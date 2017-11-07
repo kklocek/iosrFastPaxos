@@ -1,13 +1,32 @@
 import operator
-
-import pykka
 import json
 import datetime
 import _thread
+import logging
+import logging.handlers
+import pykka
 from sqs_listener import SqsListener
 from sqs_launcher import SqsLauncher
 from wsgiref.simple_server import make_server
 
+
+# Create logger
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+# Handler 
+LOG_FILE = '/opt/python/log/application.log'
+handler = logging.handlers.RotatingFileHandler(LOG_FILE, maxBytes=1048576, backupCount=5)
+handler.setLevel(logging.INFO)
+
+# Formatter
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+# Add Formatter to Handler
+handler.setFormatter(formatter)
+
+# add Handler to Logger
+logger.addHandler(handler)
 
 ## Actor definition
 
@@ -137,7 +156,7 @@ listener = MyListener('iosrFastPaxos_node1', error_queue='iosrFastPaxos_node1_er
                       region_name='us-east-2')
 
 def listen_queue():
-    print('Waiting for messages.')
+    logger.info('Waiting for messages.')
     listener.listen()
 
 
@@ -149,8 +168,8 @@ def application(environ, start_response):
     return [response]
 
 
-if __name__ == '__main__':
-    _thread.start_new_thread(listen_queue)
-    httpd = make_server('', 8000, application)
-    print("Serving on port 8000...")
-    httpd.serve_forever()
+
+_thread.start_new_thread(listen_queue, ())
+httpd = make_server('', 8000, application)
+logger.info("Serving on port 8000...")
+httpd.serve_forever()
