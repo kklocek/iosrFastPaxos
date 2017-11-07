@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 # Handler 
-LOG_FILE = '/opt/python/log/application.log'
+LOG_FILE = './application.log'
 handler = logging.handlers.RotatingFileHandler(LOG_FILE, maxBytes=1048576, backupCount=5)
 handler.setLevel(logging.INFO)
 
@@ -149,6 +149,7 @@ actor_ref = Node.start('node1')
 
 class MyListener(SqsListener):
     def handle_message(self, body, attributes, messages_attributes):
+        print('in handle')
         actor_ref.tell({'msg': body})
 
 
@@ -168,8 +169,9 @@ def application(environ, start_response):
     return [response]
 
 
-
 _thread.start_new_thread(listen_queue, ())
-httpd = make_server('', 8000, application)
-logger.info("Serving on port 8000...")
-httpd.serve_forever()
+
+if __name__ == "__main__":
+    httpd = make_server('', 8000, application)
+    logger.info("Serving on port 8000...")
+    httpd.serve_forever()
