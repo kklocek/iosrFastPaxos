@@ -18,8 +18,10 @@ def get_value(key):
 
     read_queue = sqs.get_queue_by_name(QueueName=response_queue_name)
     for message in read_queue.receive_messages(WaitTimeSeconds=5):
-        if message.body['command'] == 'read_response':
-            return message.body['key']
+        response_body = json.loads(message.body)
+        if response_body['command'] == 'read_response':
+            message.delete()
+            return response_body['key']
 
 
 def set_value(key, value):
@@ -33,6 +35,7 @@ def set_value(key, value):
     response_queue = sqs.get_queue_by_name(QueueName=response_queue_name)
     for message in response_queue.receive_messages(WaitTimeSeconds=5):
         print("Response: ", message.body)
+        message.delete()
 
 
 while True:
