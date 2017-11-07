@@ -1,8 +1,10 @@
 import pykka
 import json
 import datetime
+import _thread
 from sqs_listener import SqsListener
 from sqs_launcher import SqsLauncher
+from wsgiref.simple_server import make_server
 
 
 ## Actor definition
@@ -109,5 +111,21 @@ class MyListener(SqsListener):
 listener = MyListener('iosrFastPaxos_node1', error_queue='iosrFastPaxos_node1_error',
                       region_name='us-east-2')
 
-print('Waiting for messages. To exit press CTRL+C')
-listener.listen()
+def listen_queue():
+    print('Waiting for messages.')
+    listener.listen()
+
+
+def application(environ, start_response):
+    response = 'welcome'
+    status = '200 OK'
+    headers = [('Content-type', 'text/plain')]
+    start_response(status, headers)
+    return [response]
+
+
+if __name__ == '__main__':
+    _thread.start_new_thread(listen_queue)
+    httpd = make_server('', 8000, application)
+    print("Serving on port 8000...")
+    httpd.serve_forever()
