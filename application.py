@@ -4,6 +4,7 @@ import datetime
 import _thread
 import logging
 import logging.handlers
+import traceback
 import pykka
 from sqs_listener import SqsListener
 from sqs_launcher import SqsLauncher
@@ -33,7 +34,7 @@ logger.addHandler(handler)
 class Node(pykka.ThreadingActor):
     node_id = None
     is_coordinator = None
-    coordinator_address = None
+    coordinator_address = 'iosrFastPaxos_client1'
 
     # accepted proposed_id - after accepted! msg
     accepted_id = None
@@ -53,18 +54,22 @@ class Node(pykka.ThreadingActor):
         self.database = database
 
     def on_receive(self, message):
-        logger.info(self.node_id + ' received: ' + message)
-        msg_body = message['msg']
-        if msg_body['command'] == 'print':
-            self._print_database()
-        elif msg_body['command'] == 'any':  # P1a   prepare
-            self._handle_any(msg_body)
-        elif msg_body['command'] == 'accept':   # P2a   client has sent request
-            self._handle_proposal(msg_body)
-        elif msg_body['comand'] == 'accept_to_coordinator' and self.is_coordinator: # P2b   node has sent  his value
-            self._handle_accept_to_coordinator(msg_body)
-        elif msg_body['command'] == 'accepted': # P2b   coordinator has chosen value
-            self._handle_accepted(msg_body)
+        try:
+            logger.info(self.node_id + ' received: ' + str(message))
+            msg_body = message['msg']
+            if msg_body['command'] == 'print':
+                self._print_database()
+            elif msg_body['command'] == 'any':  # P1a   prepare
+                self._handle_any(msg_body)
+            elif msg_body['command'] == 'accept':   # P2a   client has sent request
+                self._handle_proposal(msg_body)
+            elif msg_body['comand'] == 'accept_to_coordinator' and self.is_coordinator: # P2b   node has sent  his value
+                self._handle_accept_to_coordinator(msg_body)
+            elif msg_body['command'] == 'accepted': # P2b   coordinator has chosen value
+                self._handle_accepted(msg_body)
+        except Exception as e:
+            print(e)
+            traceback.print_tb(e.__traceback__)
 
     def _handle_any(self, msg_body):
         if self._check_id(msg_body['key'], msg_body['id']):
@@ -134,7 +139,7 @@ class Node(pykka.ThreadingActor):
 
     def _send_proposal_accepted(self, key):
         launcher = SqsLauncher(self.coordinator_address)
-        launcher.launch_message({'command': 'accepted', 'key': key, 'id': self.accepted[key]['id']})
+        launcher.launch_message({'command': 'accepted', 'key': key, 'id': self.accepted[key]['proposed_id']})
 
     def _send_proposal_not_accepted(self, key, id):
         launcher = SqsLauncher(self.coordinator_address)
@@ -154,7 +159,7 @@ class MyListener(SqsListener):
 
 
 listener = MyListener('iosrFastPaxos_node1', error_queue='iosrFastPaxos_node1_error',
-                      region_name='us-east-2')
+                      region_name='us-east-2', interval=1)
 
 def listen_queue():
     logger.info('Waiting for messages.')
