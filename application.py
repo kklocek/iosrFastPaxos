@@ -53,7 +53,7 @@ class Node(pykka.ThreadingActor):
         self.database = database
 
     def on_receive(self, message):
-        print(self.node_id, ' received: ', message)
+        logger.info(self.node_id + ' received: ' + message)
         msg_body = message['msg']
         if msg_body['command'] == 'print':
             self._print_database()
@@ -81,7 +81,7 @@ class Node(pykka.ThreadingActor):
             self._send_proposal_accepted(key)
         else:
             self._send_proposal_not_accepted(key, msg_body['id'])
-            print(self.node_id, ' received outdated proposal: ', (msg_body['id']))
+            logger.info(self.node_id + ' received outdated proposal: ' + (msg_body['id']))
 
     def _handle_accept_to_coordinator(self, msg_body):
         if msg_body['value'] in self.quorum.keys():
@@ -114,7 +114,7 @@ class Node(pykka.ThreadingActor):
             # TODO what if same time
 
     def _print_database(self):
-        print(self.database)
+        logger.info(self.database)
 
     # sort quorum by value (count of accepted values from nodes)
     # then get most popular element, check if count is enough for minimal quorum, return accepted value
