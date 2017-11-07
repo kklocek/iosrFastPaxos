@@ -1,3 +1,5 @@
+import operator
+
 import pykka
 import json
 import datetime
@@ -8,7 +10,6 @@ from sqs_launcher import SqsLauncher
 ## Actor definition
 
 class Node(pykka.ThreadingActor):
-
     node_id = None
     is_coordinator = None
     coordinator_address = None
@@ -19,6 +20,11 @@ class Node(pykka.ThreadingActor):
     proposed_id = None
 
     accepted = {}
+
+    # value: count - based on accept messages
+    # TODO question: is quorum id always for proposal id?
+    quorum = {}
+    minimal_quorum = None
 
     def __init__(self, id, database={}):
         super(Node, self).__init__()
@@ -32,9 +38,11 @@ class Node(pykka.ThreadingActor):
             self._print_database()
         elif msg_body['command'] == 'any':  # P1a   prepare
             self._handle_any(msg_body)
-        elif msg_body['command'] == 'accept':  # P2a   client has sent request
+        elif msg_body['command'] == 'accept':   # P2a   client has sent request
             self._handle_proposal(msg_body)
-        elif msg_body['command'] == 'accepted':  # P2b   coordinator has chosen value
+        elif msg_body['comand'] == 'accept_to_coordinator' and self.is_coordinator: # P2b   node has sent  his value
+            self._handle_accept_to_coordinator(msg_body)
+        elif msg_body['command'] == 'accepted': # P2b   coordinator has chosen value
             self._handle_accepted(msg_body)
 
     def _handle_any(self, msg_body):
@@ -54,9 +62,16 @@ class Node(pykka.ThreadingActor):
             self._send_proposal_not_accepted(key, msg_body['id'])
             print(self.node_id, ' received outdated proposal: ', (msg_body['id']))
 
+    def _handle_accept_to_coordinator(self, msg_body):
+        if msg_body['value'] in self.quorum.keys():
+            self.quorum[msg_body['value']] +=1
+        else:
+            self.quorum[msg_body['value']] =1
+
     def _handle_accepted(self, msg_body):
         key = msg_body['key']
-        if key in self.accepted and msg_body['id'] == self.accepted[key]['id'] and msg_body['value'] == self.accepted[key]['value']:
+        if key in self.accepted and msg_body['id'] == self.accepted[key]['id'] and msg_body['value'] == \
+                self.accepted[key]['value']:
             self.database[key] = msg_body['value']
             del self.accepted[key]
         else:
@@ -75,10 +90,19 @@ class Node(pykka.ThreadingActor):
             return True
         elif self.accepted[key]['proposed_id']['time'] > id['time']:
             return False
-        #TODO what if same time
+            # TODO what if same time
 
     def _print_database(self):
         print(self.database)
+
+    # sort quorum by value (count of accepted values from nodes)
+    # then get most popular element, check if count is enough for minimal quorum, return accepted value
+    def _check_quorum(self):
+        most_popular = sorted(self.quorum.items(), key=operator.itemgetter(1), reverse=True)[0]
+        if most_popular[1] >= self.minimal_quorum:
+            return most_popular[0]
+        else:
+            return False
 
     # TODO send messages to coordinator
     def _send_any_accepted(self):
@@ -94,6 +118,7 @@ class Node(pykka.ThreadingActor):
     def _send_proposal_not_accepted(self, key, id):
         launcher = SqsLauncher(self.coordinator_address)
         launcher.launch_message({'command': 'not_accepted', 'key': key, 'id': id})
+
 
 
 actor_ref = Node.start('node1')
