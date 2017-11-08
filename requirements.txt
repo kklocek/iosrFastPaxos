@@ -3,3 +3,4 @@ pySqsListener
 pytest
 boto3
 mock
+pytest_mock
