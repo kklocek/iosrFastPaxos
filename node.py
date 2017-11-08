@@ -41,10 +41,8 @@ class Node(pykka.ThreadingActor):
             msg_body = message['msg']
             if msg_body['command'] == 'print':
                 self._print_database()
-            elif msg_body['command'] == 'any':  # P1a   prepare
-                self._handle_any(msg_body)
             elif msg_body['command'] == 'accept':   # P2a   client has sent request
-                self._handle_proposal(msg_body)
+                self._handle_accept(msg_body)
             elif msg_body['comand'] == 'accept_to_coordinator' and self.is_coordinator: # P2b   node has sent  his value
                 self._handle_accept_to_coordinator(msg_body)
             elif msg_body['command'] == 'accepted': # P2b   coordinator has chosen value
@@ -53,14 +51,7 @@ class Node(pykka.ThreadingActor):
             print(e)
             traceback.print_tb(e.__traceback__)
 
-    def _handle_any(self, msg_body):
-        if self._check_id(msg_body['key'], msg_body['id']):
-            self.proposed_id = msg_body['id']
-            self._send_any_accepted()
-        else:
-            self._send_any_not_accepted()
-
-    def _handle_proposal(self, msg_body):
+    def _handle_accept(self, msg_body):
         key = msg_body['key']
         if (not key in self.accepted) or self._check_id(key, msg_body['id']):
             proposal = {'proposed_id': msg_body['id'], 'proposed_value': msg_body['value']}
@@ -99,13 +90,6 @@ class Node(pykka.ThreadingActor):
             # What if we crash on accepted?
             pass
 
-    def _create_id(self):
-        new_id = {}
-        time_stamp = str(datetime.datetime.now())
-        new_id['time'] = time_stamp
-        new_id['id'] = self.node_id
-        return json.dumps(new_id)
-
     def _check_id(self, key, id):
         if self.accepted[key]['proposed_id']['time'] < id['time']:
             return True
@@ -129,13 +113,6 @@ class Node(pykka.ThreadingActor):
             return int(3*self.nodes_count/4) + 1
         else:
             return int(self.nodes_count/2) + 1
-
-    # TODO send messages to coordinator
-    def _send_any_accepted(self):
-        pass
-
-    def _send_any_not_accepted(self):
-        pass
 
     def _send_proposal_accepted(self, key):
         launcher = SqsLauncher(self.coordinator_address)
