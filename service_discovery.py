@@ -17,7 +17,7 @@ class ServiceDiscoveryNode(pykka.ThreadingActor):
             self.broadcast_all()
 
     def broadcast_all(self):
-        msg_body = json.dumps({"nodes" : self.database})
+        msg_body = json.dumps({"command": "service_discovery", "nodes" : self.database})
         for node in self.database:
             queue = self.sqs.get_queue_by_name(QueueName = self.database[node])
             queue.send_message(MessageBody = msg_body)
