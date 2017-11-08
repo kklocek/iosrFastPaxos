@@ -25,18 +25,13 @@ class ServiceDiscoveryNode(pykka.ThreadingActor):
             queue = sqs.get_queue_by_name(QueueName = self.database[node])
             queue.send_message(MessageBody = msg_body)
 
-
-actor_ref = ServiceDiscoveryNode.start()
-
-
-## Setting up communication
-
 class ServiceDiscoveryListener(SqsListener):
     def handle_message(self, body, attributes, messages_attributes):
         actor_ref.tell({'msg': body})
 
-listener = ServiceDiscoveryListener('iosrFastPaxos_discovery', error_queue='iosrFastPaxos_discovery_error', 
-    region_name='us-east-2')
+if __name__ == '__main__':
+  actor_ref = ServiceDiscoveryNode.start()
 
-print('Waiting for messages. To exit press CTRL+C')
-listener.listen()
+  listener = ServiceDiscoveryListener('iosrFastPaxos_discovery', error_queue='iosrFastPaxos_discovery_error', region_name='us-east-2')
+  print('Waiting for messages. To exit press CTRL+C')
+  listener.listen()

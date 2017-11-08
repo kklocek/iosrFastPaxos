@@ -2,3 +2,4 @@ pykka
 pySqsListener
 pytest
 boto3
+mock
