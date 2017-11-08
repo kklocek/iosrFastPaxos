@@ -11,9 +11,10 @@ class Node(pykka.ThreadingActor):
     node_id = None
     is_coordinator = None
     coordinator_address = 'iosrFastPaxos_client1'
-
+    service_discovery_address = 'iosrFastPaxos_discovery'
     is_fast_round = None
     nodes_count = None
+    nodes_addresses = None
 
     # accepted proposed_id - after accepted! msg
     accepted_id = None
@@ -46,6 +47,11 @@ class Node(pykka.ThreadingActor):
                 self._handle_accept_to_coordinator(msg_body)
             elif msg_body['command'] == 'accepted': # P2b   coordinator has chosen value
                 self._handle_accepted(msg_body)
+            elif msg_body['command'] == 'service_discovery':
+                nodes = msg_body['nodes']
+                self.nodes_count = len(nodes)
+                self.nodes_addresses = nodes
+
         except Exception as e:
             print(e)
             traceback.print_tb(e.__traceback__)
@@ -57,7 +63,6 @@ class Node(pykka.ThreadingActor):
             self.accepted[key] = proposal
             self._send_proposal_accepted(key)
         else:
-            self._send_proposal_not_accepted(key, msg_body['id'])
             self.logger.info(self.node_id + ' received outdated proposal: ' + (msg_body['id']))
 
     def _handle_accept_to_coordinator(self, msg_body):
@@ -107,10 +112,6 @@ class Node(pykka.ThreadingActor):
     def _send_proposal_accepted(self, key):
         launcher = SqsLauncher(self.coordinator_address)
         launcher.launch_message({'command': 'accept_to_coordinator', 'key': key, 'id': self.accepted[key]['proposed_id']})
-
-    def _send_proposal_not_accepted(self, key, id):
-        launcher = SqsLauncher(self.coordinator_address)
-        launcher.launch_message({'command': 'not_accepted', 'key': key, 'id': id})
 
     # coordinator response to client
     def _send_response(self):
