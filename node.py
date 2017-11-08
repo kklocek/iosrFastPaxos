@@ -24,7 +24,6 @@ class Node(pykka.ThreadingActor):
     accepted = {}
 
     # value: count - based on accept messages
-    # TODO question: is quorum id always for proposal id?
     quorums = []
     # classic round - 1/2 + s1
     #fast round 3/4 + 1
@@ -87,9 +86,8 @@ class Node(pykka.ThreadingActor):
 
     def _handle_accepted(self, msg_body):
         key = msg_body['key']
-        if key in self.accepted and msg_body['id'] == self.accepted[key]['id'] and msg_body['value'] == \
-                self.accepted[key]['proposed_value']:
-            self.database[key] = msg_body['value']
+        if key in self.accepted and msg_body['id'] == self.accepted[key]['id']:
+            self.database[key] = self.accepted['key']['value']
             del self.accepted[key]
         else:
             # What if we crash on accepted?
@@ -111,7 +109,7 @@ class Node(pykka.ThreadingActor):
         for quorum in self.quorums:
             if quorum['acceptedCount'] >= self._calculate_quorum():
                 self._send_response(quorum['id'])
-                self._send_accepted()
+                self._send_accepted(quorum)
 
     def _calculate_quorum(self):
         if self.is_fast_round:
@@ -125,8 +123,11 @@ class Node(pykka.ThreadingActor):
 
     # coordinator response to client
     def _send_response(self, client_id):
-        pass
+        launcher = SqsLauncher(client_id['id'])
+        launcher.launch_message({'command': 'write_response', 'response': 'accepted', 'id': client_id['time']})
 
     # commit msg to nodes
-    def _send_accepted(self):
-        pass
+    def _send_accepted(self, quorum):
+        for node_address in self.nodes_addresses:
+            launcher = SqsLauncher(node_address)
+            launcher.launch_message({'command': 'accepted', 'key': quorum['key'], 'id': quorum['id']})
