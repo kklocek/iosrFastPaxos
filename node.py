@@ -24,7 +24,7 @@ class Node(pykka.ThreadingActor):
 
     # value: count - based on accept messages
     # TODO question: is quorum id always for proposal id?
-    quorum = {}
+    quorums = []
     # classic round - 1/2 + s1
     #fast round 3/4 + 1
     minimal_quorum = None
@@ -71,18 +71,28 @@ class Node(pykka.ThreadingActor):
             self.logger.info(self.node_id + ' received outdated proposal: ' + (msg_body['id']))
 
     def _handle_accept_to_coordinator(self, msg_body):
-        if msg_body['value'] in self.quorum.keys():
-            self.quorum[msg_body['value']] +=1
+        if self._is_in_quorums(msg_body):
+            self._increment_quorum(msg_body)
         else:
-            self.quorum[msg_body['value']] =1
-        if self._check_quorum():
-            self._send_response()
-            self._send_accepted()
+            self.quorums.append[{'key': msg_body['key'], 'id': msg_body['id'], \
+                'acceptedCount': 1}]
+        self._check_quorums()
+
+    def _is_in_quorums(self, msg_body):
+        for quorum in self.quorums:
+            if quorum['key'] == msg_body['key'] and quorum['id'] == msg_body['id']:
+                return True
+        return False
+
+    def _increment_quorum(self, msg_body):
+        for quorum in self.quorums:
+            if quorum['key'] == msg_body['key'] and quorum['id'] == msg_body['id']:
+                quorum['acceptedCount'] += 1
 
     def _handle_accepted(self, msg_body):
         key = msg_body['key']
         if key in self.accepted and msg_body['id'] == self.accepted[key]['id'] and msg_body['value'] == \
-                self.accepted[key]['value']:
+                self.accepted[key]['proposed_value']:
             self.database[key] = msg_body['value']
             del self.accepted[key]
         else:
@@ -108,12 +118,11 @@ class Node(pykka.ThreadingActor):
 
     # sort quorum by value (count of accepted values from nodes)
     # then get most popular element, check if count is enough for minimal quorum, return accepted value
-    def _check_quorum(self):
-        most_popular = sorted(self.quorum.items(), key=operator.itemgetter(1), reverse=True)[0]
-        if most_popular[1] >= self.minimal_quorum:
-            return most_popular[0]
-        else:
-            return False
+    def _check_quorums(self):
+        for quorum in self.quorums:
+            if quorum['acceptedCount'] >= self._calculate_quorum():
+                self._send_response(quorum['id'])
+                self._send_accepted()
 
     def _calculate_quorum(self):
         if self.is_fast_round:
@@ -130,14 +139,14 @@ class Node(pykka.ThreadingActor):
 
     def _send_proposal_accepted(self, key):
         launcher = SqsLauncher(self.coordinator_address)
-        launcher.launch_message({'command': 'accepted', 'key': key, 'id': self.accepted[key]['proposed_id']})
+        launcher.launch_message({'command': 'accept_to_coordinator', 'key': key, 'id': self.accepted[key]['proposed_id']})
 
     def _send_proposal_not_accepted(self, key, id):
         launcher = SqsLauncher(self.coordinator_address)
         launcher.launch_message({'command': 'not_accepted', 'key': key, 'id': id})
 
     # coordinator response to client
-    def _send_response(self):
+    def _send_response(self, client_id):
         pass
 
     # commit msg to nodes
