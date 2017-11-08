@@ -12,6 +12,9 @@ class Node(pykka.ThreadingActor):
     is_coordinator = None
     coordinator_address = 'iosrFastPaxos_client1'
 
+    is_fast_round = None
+    nodes_count = None
+
     # accepted proposed_id - after accepted! msg
     accepted_id = None
     # after accept msg
@@ -22,6 +25,8 @@ class Node(pykka.ThreadingActor):
     # value: count - based on accept messages
     # TODO question: is quorum id always for proposal id?
     quorum = {}
+    # classic round - 1/2 + s1
+    #fast round 3/4 + 1
     minimal_quorum = None
 
     def __init__(self, id, database={}, logger=None):
@@ -70,6 +75,9 @@ class Node(pykka.ThreadingActor):
             self.quorum[msg_body['value']] +=1
         else:
             self.quorum[msg_body['value']] =1
+        if self._check_quorum():
+            self._send_response()
+            self._send_accepted()
 
     def _handle_accepted(self, msg_body):
         key = msg_body['key']
@@ -107,6 +115,12 @@ class Node(pykka.ThreadingActor):
         else:
             return False
 
+    def _calculate_quorum(self):
+        if self.is_fast_round:
+            return int(3*self.nodes_count/4) + 1
+        else:
+            return int(self.nodes_count/2) + 1
+
     # TODO send messages to coordinator
     def _send_any_accepted(self):
         pass
@@ -121,3 +135,11 @@ class Node(pykka.ThreadingActor):
     def _send_proposal_not_accepted(self, key, id):
         launcher = SqsLauncher(self.coordinator_address)
         launcher.launch_message({'command': 'not_accepted', 'key': key, 'id': id})
+
+    # coordinator response to client
+    def _send_response(self):
+        pass
+
+    # commit msg to nodes
+    def _send_accepted(self):
+        pass
