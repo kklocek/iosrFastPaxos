@@ -15,16 +15,12 @@ class Node(pykka.ThreadingActor):
     is_fast_round = None
     nodes_count = None
 
-    # accepted proposed_id - after accepted! msg
-    accepted_id = None
-    # after accept msg
-    proposed_id = None
-
     accepted = {}
 
     # value: count - based on accept messages
     # TODO question: is quorum id always for proposal id?
     quorums = []
+    read_quorums = []
     # classic round - 1/2 + s1
     #fast round 3/4 + 1
     minimal_quorum = None
@@ -47,6 +43,10 @@ class Node(pykka.ThreadingActor):
                 self._handle_accept_to_coordinator(msg_body)
             elif msg_body['command'] == 'accepted': # P2b   coordinator has chosen value
                 self._handle_accepted(msg_body)
+            elif msg_body['command'] == 'read':
+                self._handle_read(msg_body)
+            elif msg_body['command'] == 'read_result' and self.is_coordinator:
+                self._handle_read_result(msg_body)
         except Exception as e:
             print(e)
             traceback.print_tb(e.__traceback__)
@@ -129,3 +129,37 @@ class Node(pykka.ThreadingActor):
     # commit msg to nodes
     def _send_accepted(self):
         pass
+
+    def _handle_read(self, msg_body):
+        key = msg_body['key']
+        if key in self.database:
+            launcher = SqsLauncher(self.coordinator_address)
+            launcher.launch_message({'command': 'read_result', 'id': msg_body['id'], 'key': key, 'value': self.database[key]})
+
+    def _handle_read_result(self, msg_body):
+        if self._is_in_read_quorums(msg_body):
+            self._increment_read_quorum(msg_body)
+        else:
+            self.read_quorums.append[{'key': msg_body['key'], 'value': msg_body['value'], 'id': msg_body['id'], \
+                'acceptedCount': 1}]
+        self._check_read_quorums()
+
+    def _is_in_read_quorums(self, msg_body):
+        for quorum in self.read_quorums:
+            if quorum['key'] == msg_body['key'] and quorum['id'] == msg_body['id']:
+                return True
+        return False
+
+    def _increment_read_quorum(self, msg_body):
+         for quorum in self.read_quorums:
+            if quorum['key'] == msg_body['key'] and quorum['id'] == msg_body['id']:
+                quorum['acceptedCount'] += 1
+
+    def _check_read_quorums(self):
+        for quorum in self.read_quorums:
+            if quorum['acceptedCount'] >= self._calculate_quorum():
+                self._send_read_response(quorum['id'], quorum['value'])
+
+    def _send_read_response(self, client_id, value):
+        launcher = SqsLauncher(client_id)
+        launcher.launch_message({'command': 'read_response', 'value': value})
