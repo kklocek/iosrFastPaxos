@@ -1,2 +1,4 @@
 pykka
 pySqsListener
+pytest
+boto3
