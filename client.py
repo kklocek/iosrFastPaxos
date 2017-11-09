@@ -25,7 +25,7 @@ def get_value(key):
 
 def set_value(key, value):
     msg_body = json.dumps({'command': 'accept', 'key': key, 'value': value, 
-                'id': {'proposer_id': client_name, 'time': str(datetime.datetime.now())}})
+                'id': {'client_id': client_name, 'time': str(datetime.datetime.now())}})
     for queue_name in nodes_queues:
         queue = sqs.get_queue_by_name(QueueName=queue_name)
         queue.send_message(MessageBody=msg_body)

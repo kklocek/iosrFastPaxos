@@ -9,12 +9,12 @@ from sqs_launcher import SqsLauncher
 
 class Node(pykka.ThreadingActor):
     node_id = None
-    is_coordinator = None
-    coordinator_address = 'iosrFastPaxos_client1'
+    is_coordinator = True
+    coordinator_address = 'iosrFastPaxos_node1'
     service_discovery_address = 'iosrFastPaxos_discovery'
     is_fast_round = None
-    nodes_count = None
-    nodes_addresses = None
+    nodes_count = 1
+    nodes_addresses = ['iosrFastPaxos_node1']
 
     accepted = {}
 
@@ -39,7 +39,7 @@ class Node(pykka.ThreadingActor):
                 self._print_database()
             elif msg_body['command'] == 'accept':   # P2a   client has sent request
                 self._handle_accept(msg_body)
-            elif msg_body['comand'] == 'accept_to_coordinator' and self.is_coordinator: # P2b   node has sent  his value
+            elif msg_body['command'] == 'accept_to_coordinator' and self.is_coordinator: # P2b   node has sent  his value
                 self._handle_accept_to_coordinator(msg_body)
             elif msg_body['command'] == 'accepted': # P2b   coordinator has chosen value
                 self._handle_accepted(msg_body)
@@ -69,8 +69,8 @@ class Node(pykka.ThreadingActor):
         if self._is_in_quorums(msg_body):
             self._increment_quorum(msg_body)
         else:
-            self.quorums.append[{'key': msg_body['key'], 'id': msg_body['id'], \
-                'acceptedCount': 1}]
+            self.quorums.append({'key': msg_body['key'], 'id': msg_body['id'], 
+                'acceptedCount': 1})
         self._check_quorums()
 
     def _is_in_quorums(self, msg_body):
@@ -86,8 +86,10 @@ class Node(pykka.ThreadingActor):
 
     def _handle_accepted(self, msg_body):
         key = msg_body['key']
-        if key in self.accepted and msg_body['id'] == self.accepted[key]['id']:
-            self.database[key] = self.accepted['key']['value']
+        print(msg_body)
+        print(self.accepted[key])
+        if key in self.accepted and msg_body['id'] == self.accepted[key]['proposed_id']:
+            self.database[key] = self.accepted['key']['proposed_value']
             del self.accepted[key]
         else:
             # What if we crash on accepted?
@@ -122,9 +124,9 @@ class Node(pykka.ThreadingActor):
         launcher.launch_message({'command': 'accept_to_coordinator', 'key': key, 'id': self.accepted[key]['proposed_id']})
 
     # coordinator response to client
-    def _send_response(self, client_id):
-        launcher = SqsLauncher(client_id['id'])
-        launcher.launch_message({'command': 'write_response', 'response': 'accepted', 'id': client_id['time']})
+    def _send_response(self, id):
+        launcher = SqsLauncher(id['client_id'])
+        launcher.launch_message({'command': 'write_response', 'response': 'accepted', 'id': id['time']})
 
     # commit msg to nodes
     def _send_accepted(self, quorum):
@@ -142,8 +144,8 @@ class Node(pykka.ThreadingActor):
         if self._is_in_read_quorums(msg_body):
             self._increment_read_quorum(msg_body)
         else:
-            self.read_quorums.append[{'key': msg_body['key'], 'value': msg_body['value'], 'id': msg_body['id'], \
-                'acceptedCount': 1}]
+            self.read_quorums.append({'key': msg_body['key'], 'value': msg_body['value'], 'id': msg_body['id'], \
+                'acceptedCount': 1})
         self._check_read_quorums()
 
     def _is_in_read_quorums(self, msg_body):
