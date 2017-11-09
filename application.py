@@ -37,7 +37,7 @@ class MyListener(SqsListener):
 
 
 listener = MyListener('iosrFastPaxos_node1', error_queue='iosrFastPaxos_node1_error',
-                      region_name='us-east-2', interval=1)
+                      region_name='us-east-2', interval=0.1)
 
 def listen_queue():
     logger.info('Waiting for messages.')

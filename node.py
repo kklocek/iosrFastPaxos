@@ -86,10 +86,8 @@ class Node(pykka.ThreadingActor):
 
     def _handle_accepted(self, msg_body):
         key = msg_body['key']
-        print(msg_body)
-        print(self.accepted[key])
         if key in self.accepted and msg_body['id'] == self.accepted[key]['proposed_id']:
-            self.database[key] = self.accepted['key']['proposed_value']
+            self.database[key] = self.accepted[key]['proposed_value']
             del self.accepted[key]
         else:
             # What if we crash on accepted?
@@ -162,8 +160,8 @@ class Node(pykka.ThreadingActor):
     def _check_read_quorums(self):
         for quorum in self.read_quorums:
             if quorum['acceptedCount'] >= self._calculate_quorum():
-                self._send_read_response(quorum['id'], quorum['value'])
+                self._send_read_response(quorum['id'], quorum['key'], quorum['value'])
 
-    def _send_read_response(self, client_id, value):
+    def _send_read_response(self, client_id, key, value):
         launcher = SqsLauncher(client_id)
-        launcher.launch_message({'command': 'read_response', 'value': value})
+        launcher.launch_message({'command': 'read_response', 'key': key, 'value': value})

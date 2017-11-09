@@ -18,7 +18,7 @@ def get_value(key):
     read_queue = sqs.get_queue_by_name(QueueName=client_name)
     for message in read_queue.receive_messages(WaitTimeSeconds=5):
         response_body = json.loads(message.body)
-        if response_body['command'] == 'read_response':
+        if response_body['command'] == 'read_response' and response_body['key'] == key:
             message.delete()
             return response_body['value']
 
