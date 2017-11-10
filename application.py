@@ -25,8 +25,11 @@ handler.setFormatter(formatter)
 # add Handler to Logger
 logger.addHandler(handler)
 
+node_id = os.environ.get('NODE_ID', 'iosrFastPaxos_node1')
 
-actor_ref = Node.start(os.environ.get('NODE_ID', 'iosrFastPaxos_node1'), logger=logger)
+print("Node id: ", node_id)
+
+actor_ref = Node.start(node_id, logger=logger)
 
 
 ## Setting up communication
@@ -37,7 +40,7 @@ class MyListener(SqsListener):
         actor_ref.tell({'msg': body})
 
 
-listener = MyListener('iosrFastPaxos_node1', error_queue='iosrFastPaxos_node1_error',
+listener = MyListener(node_id, error_queue=node_id + '_error',
                       region_name='us-east-2', interval=0.1)
 
 def listen_queue():
@@ -56,6 +59,7 @@ def application(environ, start_response):
 _thread.start_new_thread(listen_queue, ())
 
 if __name__ == "__main__":
-    httpd = make_server('', 8000, application)
-    logger.info("Serving on port 8000...")
-    httpd.serve_forever()
+    #httpd = make_server('', 8000, application)
+    #logger.info("Serving on port 8000...")
+    #httpd.serve_forever()
+    pass

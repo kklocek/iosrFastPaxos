@@ -16,6 +16,11 @@ class ServiceDiscoveryNode(pykka.ThreadingActor):
         if msg_body['command'] == "hello":
             self.database[msg_body['node_name']] = msg_body['node_address']
             self.broadcast_all()
+        elif msg_body['command'] == "get_nodes":
+            response = {'command': 'service_discovery', 'nodes' : self.database}
+            print("send msg to " + msg_body['id'])
+            launcher = SqsLauncher(msg_body['id'])
+            launcher.launch_message(response)
 
     def broadcast_all(self):
         msg_body = {'command': 'service_discovery', 'nodes' : self.database}
@@ -32,6 +37,7 @@ if __name__ == '__main__':
         def handle_message(self, body, attributes, messages_attributes):
             actor_ref.tell({'msg': body})
 
-    listener = ServiceDiscoveryListener('iosrFastPaxos_discovery', error_queue='iosrFastPaxos_discovery_error', region_name='us-east-2')
+    listener = ServiceDiscoveryListener('iosrFastPaxos_discovery', 
+        error_queue='iosrFastPaxos_discovery_error', region_name='us-east-2', interval=1)
     print('Waiting for messages. To exit press CTRL+C')
     listener.listen()
