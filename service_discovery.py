@@ -69,7 +69,7 @@ class ServiceDiscoveryListener(SqsListener):
         actor_ref.tell({'msg': body})
 
 listener = ServiceDiscoveryListener('iosrFastPaxos_discovery', 
-    error_queue='iosrFastPaxos_discovery_error', region_name='us-east-2', interval=1)
+    error_queue='iosrFastPaxos_discovery_error', region_name='us-east-2', interval=0.2)
 
 
 def listen_queue():

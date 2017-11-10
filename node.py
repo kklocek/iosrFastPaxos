@@ -64,7 +64,7 @@ class Node(pykka.ThreadingActor):
                 print(self.nodes_addresses)
             elif msg_body['command'] == 'new_coordinator':
                 self.coordinator_address = msg_body['node_id']
-                if msg_body['node_id'] == os.environ.get('NODE_ID', 'iosrFastPaxos_node1'):
+                if msg_body['node_id'] == self.node_id:
                     self.is_coordinator = True
         except Exception as e:
             print(e)
@@ -182,5 +182,5 @@ class Node(pykka.ThreadingActor):
 
     def _send_alive_msg(self):
         launcher = SqsLauncher(self.service_discovery_address)
-        launcher.launch_message(({'command': 'alive', 'node_id': os.environ.get('NODE_ID', 'iosrFastPaxos_node1'),
+        launcher.launch_message(({'command': 'alive', 'node_id': self.node_id,
                                   'coordinator': self.is_coordinator}))
