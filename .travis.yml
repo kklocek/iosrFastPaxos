@@ -10,4 +10,5 @@ install:
 script:
   - pytest
 env:
-  - PYTHONPATH='.'
+  - PYTHONPATH=.
+  - AWS_ACCOUNT_ID=kanapka
