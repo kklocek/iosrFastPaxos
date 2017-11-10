@@ -26,7 +26,7 @@ handler.setFormatter(formatter)
 logger.addHandler(handler)
 
 
-actor_ref = Node.start(os.environ.get('NODE_ID', 'iosrFaxtPaxos_node1'), logger=logger)
+actor_ref = Node.start(os.environ.get('NODE_ID', 'iosrFastPaxos_node1'), logger=logger)
 
 
 ## Setting up communication

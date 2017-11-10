@@ -58,7 +58,7 @@ class Node(pykka.ThreadingActor):
                 nodes = msg_body['nodes']
                 self.nodes_count = len(nodes)
                 self.nodes_addresses = nodes
-
+                print(self.nodes_addresses)
         except Exception as e:
             print(e)
             traceback.print_tb(e.__traceback__)
