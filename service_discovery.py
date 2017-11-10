@@ -1,9 +1,17 @@
 import pykka
 from sqs_listener import SqsListener
 import json
+import _thread
 import boto3
+import integration
+from sqs_launcher import SqsLauncher
+from wsgiref.simple_server import make_server
 
 class ServiceDiscoveryNode(pykka.ThreadingActor):
+
+    alive = {}
+    counter = 0
+
     def __init__(self, sqs, database = {}):
         super(ServiceDiscoveryNode, self).__init__()
         self.database = database
@@ -15,21 +23,65 @@ class ServiceDiscoveryNode(pykka.ThreadingActor):
         if msg_body['command'] == "hello":
             self.database[msg_body['node_name']] = msg_body['node_address']
             self.broadcast_all()
+        elif msg_body['command'] == "get_nodes":
+            response = {'command': 'service_discovery', 'nodes' : self.database}
+            print("send msg to " + msg_body['id'])
+            launcher = integration.get_sqs(msg_body['id'])
+            launcher.launch_message(response)
+        elif msg_body['command'] == 'alive':
+            self.counter += 1
+            if msg_body['coordinator']:
+                self.alive[msg_body['node_id']] = 1
+            else:
+                self.alive[msg_body['node_id']] = 0
+            self._check_counter()
 
     def broadcast_all(self):
-        msg_body = json.dumps({"nodes" : self.database})
+        msg_body = {'command': 'service_discovery', 'nodes' : self.database}
         for node in self.database:
-            queue = self.sqs.get_queue_by_name(QueueName = self.database[node])
-            queue.send_message(MessageBody = msg_body)
+            print("send msg to " + node)
+            launcher = integration.get_sqs(node)
+            launcher.launch_message(msg_body)
 
-class ServiceDiscoveryListener(SqsListener):
-    def handle_message(self, body, attributes, messages_attributes):
-        actor_ref.tell({'msg': body})
+    def _check_counter(self):
+        if self.counter > ((3*len(self.database))/2):
+            if 1 not in self.alive.values():
+                self._init_recovery()
+            self.alive.clear()
+            self.counter = 0
 
-if __name__ == '__main__':
+    def _init_recovery(self):
+        new_coordinator_address = sorted(self.alive)[0][0]
+        msg_body = {'command': 'new_coordinator', 'node_id': new_coordinator_address}
+        self.broadcast_new_coordinator(msg_body)
+
+    def broadcast_new_coordinator(self, msg_body):
+        for node in self.database:
+            print("send new coordinator to " + node)
+            launcher = integration.get_sqs(node)
+            launcher.launch_message(msg_body)
+
+if __name__ == "__main__":
     sqs = boto3.resource('sqs')
     actor_ref = ServiceDiscoveryNode.start(sqs)
 
-    listener = ServiceDiscoveryListener('iosrFastPaxos_discovery', error_queue='iosrFastPaxos_discovery_error', region_name='us-east-2')
-    print('Waiting for messages. To exit press CTRL+C')
-    listener.listen()
+    class ServiceDiscoveryListener(SqsListener):
+        def handle_message(self, body, attributes, messages_attributes):
+            actor_ref.tell({'msg': body})
+
+    listener = ServiceDiscoveryListener('iosrFastPaxos_discovery', error_queue='iosrFastPaxos_discovery_error', region_name='us-east-2', interval=1)
+
+    def listen_queue():
+        listener.listen()
+
+    def application(environ, start_response):
+        response = 'welcome'
+        status = '200 OK'
+        headers = [('Content-type', 'text/plain')]
+        start_response(status, headers)
+        return [response]
+
+
+    _thread.start_new_thread(listen_queue, ())
+    httpd = make_server('', 8000, application)
+    httpd.serve_forever()

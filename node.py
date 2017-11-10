@@ -2,6 +2,8 @@ import json
 import datetime
 import operator
 import traceback
+
+import os
 import pykka
 from sqs_launcher import SqsLauncher
 
@@ -12,7 +14,7 @@ class Node(pykka.ThreadingActor):
     is_coordinator = True
     coordinator_address = 'iosrFastPaxos_node1'
     service_discovery_address = 'iosrFastPaxos_discovery'
-    is_fast_round = None
+    is_fast_round = True
     nodes_count = 1
     nodes_addresses = ['iosrFastPaxos_node1']
 
@@ -25,25 +27,33 @@ class Node(pykka.ThreadingActor):
     #fast round 3/4 + 1
     minimal_quorum = None
 
-    def __init__(self, id, database={}, logger=None):
+    def __init__(self, id, database={}):
         super(Node, self).__init__()
         self.node_id = id
         self.database = database
-        self.logger = logger
+        self.get_addresses()
+        if self.node_id != self.coordinator_address:
+            is_coordinator = False
+
+    def get_addresses(self):
+        launcher = SqsLauncher(self.service_discovery_address)
+        launcher.launch_message({'command': 'hello', 'node_name': self.node_id, 'node_address': self.node_id})
 
     def on_receive(self, message):
         try:
-            self.logger.info(self.node_id + ' received: ' + str(message))
+            print(self.node_id + ' received: ' + str(message))
             msg_body = message['msg']
             if msg_body['command'] == 'print':
                 self._print_database()
             elif msg_body['command'] == 'accept':   # P2a   client has sent request
+                self._send_alive_msg()
                 self._handle_accept(msg_body)
             elif msg_body['command'] == 'accept_to_coordinator' and self.is_coordinator: # P2b   node has sent  his value
                 self._handle_accept_to_coordinator(msg_body)
             elif msg_body['command'] == 'accepted': # P2b   coordinator has chosen value
                 self._handle_accepted(msg_body)
             elif msg_body['command'] == 'read':
+                self._send_alive_msg()
                 self._handle_read(msg_body)
             elif msg_body['command'] == 'read_result' and self.is_coordinator:
                 self._handle_read_result(msg_body)
@@ -51,25 +61,29 @@ class Node(pykka.ThreadingActor):
                 nodes = msg_body['nodes']
                 self.nodes_count = len(nodes)
                 self.nodes_addresses = nodes
-
+                print(self.nodes_addresses)
+            elif msg_body['command'] == 'new_coordinator':
+                self.coordinator_address = msg_body['node_id']
+                if msg_body['node_id'] == os.environ.get('NODE_ID', 'iosrFastPaxos_node1'):
+                    self.is_coordinator = True
         except Exception as e:
             print(e)
             traceback.print_tb(e.__traceback__)
 
     def _handle_accept(self, msg_body):
         key = msg_body['key']
-        if (not key in self.accepted) or self._check_id(key, msg_body['id']):
+        if (key not in self.accepted) or self._check_id(key, msg_body['id']):
             proposal = {'proposed_id': msg_body['id'], 'proposed_value': msg_body['value']}
             self.accepted[key] = proposal
             self._send_proposal_accepted(key)
         else:
-            self.logger.info(self.node_id + ' received outdated proposal: ' + (msg_body['id']))
+            print(self.node_id + ' received outdated proposal: ' + (msg_body['id']))
 
     def _handle_accept_to_coordinator(self, msg_body):
         if self._is_in_quorums(msg_body):
             self._increment_quorum(msg_body)
         else:
-            self.quorums.append({'key': msg_body['key'], 'id': msg_body['id'], 
+            self.quorums.append({'key': msg_body['key'], 'id': msg_body['id'],
                 'acceptedCount': 1})
         self._check_quorums()
 
@@ -101,7 +115,7 @@ class Node(pykka.ThreadingActor):
             # TODO what if same time
 
     def _print_database(self):
-        self.logger.info(self.database)
+        print(self.database)
 
     # sort quorum by value (count of accepted values from nodes)
     # then get most popular element, check if count is enough for minimal quorum, return accepted value
@@ -165,3 +179,8 @@ class Node(pykka.ThreadingActor):
     def _send_read_response(self, client_id, key, value):
         launcher = SqsLauncher(client_id)
         launcher.launch_message({'command': 'read_response', 'key': key, 'value': value})
+
+    def _send_alive_msg(self):
+        launcher = SqsLauncher(self.service_discovery_address)
+        launcher.launch_message(({'command': 'alive', 'node_id': os.environ.get('NODE_ID', 'iosrFastPaxos_node1'),
+                                  'coordinator': self.is_coordinator}))
