@@ -30,6 +30,13 @@ class Node(pykka.ThreadingActor):
         self.node_id = id
         self.database = database
         self.logger = logger
+        self.get_addresses()
+        if self.node_id != self.coordinator_address:
+            is_coordinator = False
+
+    def get_addresses(self):
+        launcher = SqsLauncher(self.service_discovery_address)
+        launcher.launch_message({'command': 'hello', 'node_name': self.node_id, 'node_address': self.node_id})
 
     def on_receive(self, message):
         try:

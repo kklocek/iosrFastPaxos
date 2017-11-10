@@ -1,6 +1,7 @@
 import _thread
 import logging
 import logging.handlers
+import os
 from sqs_listener import SqsListener
 from wsgiref.simple_server import make_server
 from node import Node
@@ -25,7 +26,7 @@ handler.setFormatter(formatter)
 logger.addHandler(handler)
 
 
-actor_ref = Node.start('node1', logger=logger)
+actor_ref = Node.start(os.environ.get('NODE_ID', 'iosrFaxtPaxos_node1'), logger=logger)
 
 
 ## Setting up communication
