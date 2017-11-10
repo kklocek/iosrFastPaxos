@@ -3,6 +3,7 @@ from sqs_listener import SqsListener
 import json
 import _thread
 import boto3
+import integration
 from sqs_launcher import SqsLauncher
 from wsgiref.simple_server import make_server
 
@@ -25,7 +26,7 @@ class ServiceDiscoveryNode(pykka.ThreadingActor):
         elif msg_body['command'] == "get_nodes":
             response = {'command': 'service_discovery', 'nodes' : self.database}
             print("send msg to " + msg_body['id'])
-            launcher = SqsLauncher(msg_body['id'])
+            launcher = integration.get_sqs(msg_body['id'])
             launcher.launch_message(response)
         elif msg_body['command'] == 'alive':
             self.counter += 1
@@ -39,7 +40,7 @@ class ServiceDiscoveryNode(pykka.ThreadingActor):
         msg_body = {'command': 'service_discovery', 'nodes' : self.database}
         for node in self.database:
             print("send msg to " + node)
-            launcher = SqsLauncher(node)
+            launcher = integration.get_sqs(node)
             launcher.launch_message(msg_body)
 
     def _check_counter(self):
@@ -57,7 +58,7 @@ class ServiceDiscoveryNode(pykka.ThreadingActor):
     def broadcast_new_coordinator(self, msg_body):
         for node in self.database:
             print("send new coordinator to " + node)
-            launcher = SqsLauncher(node)
+            launcher = integration.get_sqs(node)
             launcher.launch_message(msg_body)
 
 if __name__ == "__main__":
