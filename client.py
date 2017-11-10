@@ -58,6 +58,7 @@ def set_value(key, value):
 
 while True:
     nodes_queues = get_nodes()
+    print(nodes_queues)
     action = input("Enter 'g' to get value by key or 's' to save value: ")
     if action == 'g':
         key = input("Key: ")
